@@ -43,3 +43,16 @@ coverage.xml
 .vscode/
 *.swp
 *.swo
+
+# Other files
+.ropeproject
+.DS_Store
+**/.DS_Store
+
+
+# Pickle files
+*.pkl
+*.faiss
+
+# Test files
+*.txt
