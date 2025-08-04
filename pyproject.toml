@@ -12,7 +12,8 @@ dependencies = [
     "rank-bm25>=0.2.2",
     "sentence-transformers>=5.0.0",
     "tiktoken>=0.9.0",
-    "tree-sitter>=0.25.0",
+    "tree-sitter==0.20.2",
+    "tree-sitter-languages==1.10.2",
     "tree-sitter-python>=0.23.6",
     "unidiff>=0.7.5",
 ]

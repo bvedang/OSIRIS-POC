@@ -1,3 +1,5 @@
+# OSIRIS - A Context-Rich PR Reviewer
+
 from __future__ import annotations
 
 import sys
@@ -12,7 +14,7 @@ import traceback
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Set, Tuple
+from typing import Dict, Iterable, List,  Set
 
 import faiss
 import google.generativeai as genai
@@ -23,10 +25,11 @@ from unidiff import PatchSet
 from parser import (
     ExtractedDiffContent,
     extract_code_blocks_from_diff,
-    extract_identifiers_from_diff,
     create_code_block_embedding_text,   
+    extract_identifiers_from_diff
 )
 
+from utils.ast_locator import ast_locator
 from lsp_spike import LspClient
 
 load_dotenv()
@@ -43,6 +46,7 @@ VECTOR_INDEX_FILE = os.getenv('VECTOR_INDEX_FILE', 'repo_enhanced.faiss')
 CHUNKS_FILE = os.getenv('CHUNKS_FILE', 'repo_chunks_enhanced.pkl')
 BM25_INDEX_FILE = os.getenv('BM25_INDEX_FILE', 'repo_bm25_enhanced.pkl')
 MODEL_INFO_FILE = os.getenv('MODEL_INFO_FILE', 'embedding_model.txt')
+REPO_PATH = Path(os.getenv('REPO_PATH')).resolve()
 
 
 @dataclass
@@ -55,40 +59,6 @@ class AnalysisResult:
     file_patterns: List[str]
 
 
-def ast_locator(path: str, name: str, kind: str) -> Optional[Tuple[int, int]]:
-    if not Path(path).exists():
-        return None
-        
-    try:
-        src = Path(path).read_text(encoding='utf-8', errors='ignore')
-        tree = ast.parse(src, filename=path)
-    except (SyntaxError, FileNotFoundError, OSError):
-        return None
-    
-    class Visitor(ast.NodeVisitor):
-        def __init__(self):
-            self.loc = None
-        
-        def visit_FunctionDef(self, node):
-            if kind == 'function' and node.name == name and self.loc is None:
-                self.loc = (node.lineno - 1, node.col_offset)
-            self.generic_visit(node)
-        
-        def visit_AsyncFunctionDef(self, node):
-            if kind == 'function' and node.name == name and self.loc is None:
-                self.loc = (node.lineno - 1, node.col_offset)
-            self.generic_visit(node)
-        
-        def visit_ClassDef(self, node):
-            if kind == 'class' and node.name == name and self.loc is None:
-                self.loc = (node.lineno - 1, node.col_offset)
-            self.generic_visit(node)
-    
-    v = Visitor()
-    v.visit(tree)
-    return v.loc
-
-
 def build_symbol_map(chunks: List[dict]) -> Dict[str, List[dict]]:
     symbol_map: Dict[str, List[dict]] = defaultdict(list)
     for chunk in chunks:
@@ -97,16 +67,30 @@ def build_symbol_map(chunks: List[dict]) -> Dict[str, List[dict]]:
     return dict(symbol_map)
 
 
-def prime_lsp(lsp: LspClient, paths: Iterable[str]) -> None:
+def prime_lsp(lsp: LspClient, paths: Iterable[str], repo_root: Path) -> None:
+    """Prime LSP with files, handling both absolute and relative paths."""
+    seen_paths = set() 
+    
     for path in paths:
-        if not Path(path).exists():
-            print(f"Skipping non-existent file for LSP: {path}")
+        if Path(path).is_absolute():
+            abs_path = Path(path)
+        else:
+            abs_path = (repo_root / path).resolve()
+        
+        if abs_path in seen_paths:
+            continue
+        seen_paths.add(abs_path)
+        
+        print(abs_path)
+        
+        if not abs_path.exists():
+            print(f"Skipping non-existent file for LSP: {abs_path}")
             continue
             
         try:
-            lsp.open_file(path)
+            lsp.open_file(str(abs_path))
         except Exception as e:
-            print(f"Warning: Failed to prime LSP for {path}: {e}")
+            print(f"Warning: Failed to prime LSP for {abs_path}: {e}")
 
 
 def gather_references(
@@ -755,6 +739,7 @@ def main():
         lsp.start()
         lsp.initialize()
         
+
         relevant_files = {chunks[i]['file_path'] for i in top_indices}
         relevant_files.update(identifiers.get('modified_files', set()))
         
@@ -767,7 +752,7 @@ def main():
         
         prime_start = time.time()
         print(f"Priming LSP with {len(relevant_files)} files...")
-        prime_lsp(lsp, relevant_files)
+        prime_lsp(lsp, relevant_files,REPO_PATH)
         prime_time = time.time() - prime_start
         
         refs_start = time.time()
