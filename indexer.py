@@ -17,7 +17,7 @@ MODEL_NAME        = os.getenv("EMBEDDING_MODEL", "buelfhood/unixcoder-base-unimo
 VECTOR_INDEX_FILE = os.getenv("VECTOR_INDEX_FILE", "repo_index.faiss")
 CHUNKS_FILE       = os.getenv("CHUNKS_FILE", "repo_chunks.pkl")
 BM25_INDEX_FILE   = os.getenv("BM25_INDEX_FILE", "repo_bm25_index.pkl")
-SKIP_DIRS         = set(os.getenv("SKIP_DIRS", "__pycache__,.git,venv,.env").split(","))
+SKIP_DIRS         = set(os.getenv("SKIP_DIRS", "__pycache__,.git,.venv,.env").split(","))
 
 EXT_LANGUAGE = {
     ".py":  get_language("python"),
